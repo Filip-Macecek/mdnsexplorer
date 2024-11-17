@@ -8,6 +8,7 @@ use pnet::packet::udp::UdpPacket;
 use pnet::packet::{ethernet::EthernetPacket, Packet};
 use std::net::IpAddr;
 
+// TODO: Run as administrator.
 fn main() {
     // Get the list of available network interfaces
     let interfaces = interfaces();
@@ -70,7 +71,7 @@ fn handle_ipv4_packet(ipv4_packet: &Ipv4Packet) -> Option<MDNSPacket> {
             let udp_packet = UdpPacket::new(ipv4_packet.payload()).unwrap();
             return if MDNSPacket::is_mdns_packet(&udp_packet) {
                 for c in udp_packet.payload() {
-                    print!("{}", c);
+                    print!("{}, ", c);
                 }
                 println!();
                 MDNSPacket::parse_mdns_packet(&udp_packet.payload())
