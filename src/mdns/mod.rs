@@ -6,20 +6,21 @@ pub mod mdns {
     use pnet::packet::udp::UdpPacket;
 
     pub struct MDNSQuestion{
-        pub labels_raw: Vec<Vec<u8>>,
+        pub labels_raw: Vec<u8>,
         pub labels: Vec<String>,
         pub question_type: u16, // first byte is terminator for labels and as such is always 0
         pub question_class: u16
     }
 
     pub struct MDNSAnswer{
-        pub labels_raw: Vec<Vec<u8>>,
+        pub labels_raw: Vec<u8>,
         pub labels: Vec<String>,
         pub answer_type: u16, // first byte is terminator for labels and as such is always 0
         pub answer_class: u16,
         pub ttl: u32,
         pub rd_length: u16,
-        pub rdata_raw: Vec<u8>
+        pub rdata_raw: Vec<u8>,
+        pub rdata_labels: Option<Vec<String>> // TODO: This is only valid on certain answer types.
     }
     
     pub struct MDNSPacket{
@@ -91,47 +92,60 @@ pub mod mdns {
             Some(packet)
         }
 
+        fn parse_labels(bytes: &[u8], start_index: usize) -> (usize, Vec<String>)
+        {
+            let label_length = 0;
+            let label = 1;
+            let mut state = label_length;
+            let mut labels_raw: Vec<Vec<u8>> = Vec::new();
+            let mut label_array: Vec<u8> = Vec::with_capacity(0);
+            let mut byte_index = start_index;
+            let mut current_byte = bytes[byte_index];
+            while current_byte != 0 {
+                if state == label_length {
+                    let length = current_byte;
+                    label_array = Vec::with_capacity(length as usize);
+                    state = label;
+                }
+                else if state == label {
+                    label_array.push(current_byte);
+                    if label_array.capacity() == label_array.len(){
+                        labels_raw.push(label_array.clone());
+                        state = label_length;
+                    }
+                }
+                byte_index += 1;
+                current_byte = bytes.get(byte_index).unwrap_or(&0).clone();
+            }
+
+            let mut labels_str = Vec::new();
+            for label_raw in labels_raw.clone() {
+                let s = from_utf8(&label_raw).unwrap();
+                labels_str.push(s.to_string())
+            }
+
+            // skip the 0 byte
+            return (byte_index, labels_str);
+        }
+
         pub fn parse_mdns_questions(&self) -> (usize, Vec<MDNSQuestion>)
         {
             let mut questions = Vec::with_capacity(self.question_count as usize);
             let mut byte_index: usize = 0;
-            let label_length = 0;
-            let label = 1;
             for i in 0..self.question_count
             {
                 let mut current_byte = self.questions_answers[byte_index];
-                let mut state = label_length;
-                let mut labels_raw: Vec<Vec<u8>> = Vec::new();
-                let mut label_array: Vec<u8> = Vec::with_capacity(0);
-                while current_byte != 0 {
-                    if state == label_length {
-                        let length = current_byte;
-                        label_array = Vec::with_capacity(length as usize);
-                        state = label;
-                    }
-                    else if state == label {
-                        label_array.push(current_byte);
-                        if label_array.capacity() == label_array.len(){
-                            labels_raw.push(label_array.clone());
-                            state = label_length;
-                        }
-                    }
-                    byte_index += 1;
-                    current_byte = self.questions_answers[byte_index];
-                }
-
-                let mut labels_str = Vec::new();
-                for label_raw in labels_raw.clone() {
-                    let s = from_utf8(&label_raw).unwrap();
-                    labels_str.push(s.to_string())
-                }
+                let (bytes_read, labels_str) = MDNSPacket::parse_labels(&self.questions_answers, 0);
+                let labels_raw = &self.questions_answers[byte_index..bytes_read];
+                byte_index += bytes_read + 1;
+                current_byte = self.questions_answers[byte_index];
 
                 let question_type = ((current_byte as u16) << 8) | (self.questions_answers[byte_index + 1] as u16);
                 let question_class = ((self.questions_answers[byte_index + 2] as u16) << 8) | (self.questions_answers[byte_index + 3] as u16);
 
                 questions.push(MDNSQuestion{
-                    labels_raw: labels_raw.clone(),
-                    labels: labels_str.iter().map(|l| l.to_string()).collect(),
+                    labels_raw: labels_raw.to_vec(),
+                    labels: labels_str,
                     question_type: question_type,
                     question_class: question_class
                 });
@@ -144,38 +158,13 @@ pub mod mdns {
         {
             let mut answers = Vec::with_capacity(answer_count as usize);
             let mut byte_index: usize = start_byte;
-            let label_length = 0;
-            let label = 1;
             for i in 0..answer_count
             {
                 let mut current_byte = bytes[byte_index];
-                let mut state = label_length;
-                let mut labels_raw: Vec<Vec<u8>> = Vec::new();
-                let mut label_array: Vec<u8> = Vec::with_capacity(0);
-                while current_byte != 0 {
-                    if state == label_length {
-                        let length = current_byte;
-                        label_array = Vec::with_capacity(length as usize);
-                        state = label;
-                    }
-                    else if state == label {
-                        label_array.push(current_byte);
-                        if label_array.capacity() == label_array.len(){
-                            labels_raw.push(label_array.clone());
-                            state = label_length;
-                        }
-                    }
-                    byte_index += 1;
-                    current_byte = bytes[byte_index];
-                }
-
-                byte_index += 1; // skip terminating 0
-
-                let mut labels_str = Vec::new();
-                for label_raw in labels_raw.clone() {
-                    let s = from_utf8(&label_raw).unwrap();
-                    labels_str.push(s.to_string())
-                }
+                let (bytes_read, labels_str) = MDNSPacket::parse_labels(bytes, 0);
+                let labels_raw = &bytes[byte_index..(bytes_read + 1)];
+                byte_index += bytes_read + 1;
+                current_byte = bytes[byte_index];
 
                 let answer_type = ((current_byte as u16) << 8) | (bytes[byte_index + 1] as u16);
                 let answer_class = ((bytes[byte_index + 2] as u16) << 8) | (bytes[byte_index + 3] as u16);
@@ -185,22 +174,24 @@ pub mod mdns {
                     | (bytes[byte_index + 7] as u32);
                 let rd_length: u16 = ((bytes[byte_index + 8] as u16) << 8) | (bytes[byte_index + 9] as u16);
                 let mut rdata_raw: Vec<u8> = Vec::with_capacity(rd_length as usize);
-                
+
                 byte_index += 10;
                 for i in 0..rd_length {
-                    rdata_raw.push(bytes[byte_index+i as usize])    
+                    rdata_raw.push(bytes[byte_index+i as usize])
                 }
-                
+                let rdata_labels = Self::parse_labels(&rdata_raw, 0);
+
                 answers.push(MDNSAnswer{
-                    labels_raw: labels_raw.clone(),
+                    labels_raw: labels_raw.to_vec(),
                     labels: labels_str.iter().map(|l| l.to_string()).collect(),
                     answer_type: answer_type,
                     answer_class: answer_class,
                     ttl: ttl,
                     rd_length: rd_length,
-                    rdata_raw: rdata_raw
+                    rdata_raw: rdata_raw,
+                    rdata_labels: Some(rdata_labels.1)
                 });
-                byte_index = (rd_length + 1) as usize;
+                byte_index += (rd_length + 1) as usize;
             }
             return (byte_index - 1, answers);
         }
