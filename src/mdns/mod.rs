@@ -1,7 +1,9 @@
 mod tests;
 
 pub mod mdns {
+    use std::collections::HashMap;
     use std::fmt::{Display, Formatter};
+    use std::ptr::hash;
     use std::str::{from_utf8, from_utf8_mut};
     use pnet::packet::udp::UdpPacket;
 
@@ -24,6 +26,7 @@ pub mod mdns {
     }
     
     pub struct MDNSPacket{
+        pub raw: Vec<u8>,
         pub query_identifier: u16,
         pub flags: u16,
         pub question_count: u16,
@@ -32,7 +35,8 @@ pub mod mdns {
         pub additional_count: u16,
         pub questions_answers: Vec<u8>,
         pub questions: Vec<MDNSQuestion>,
-        pub answers: Vec<MDNSAnswer>
+        pub answers: Vec<MDNSAnswer>,
+        pub labels_by_index: HashMap<u16, * const String>
     }
 
     impl Display for MDNSPacket {
@@ -62,6 +66,7 @@ pub mod mdns {
             let additional_count = ((udp_payload[10] as u16) << 8) | udp_payload[11] as u16;
 
             let packet = MDNSPacket {
+                raw: udp_payload.to_vec(),
                 query_identifier: query_identifier,
                 flags: flags,
                 question_count: question_count,
@@ -70,62 +75,42 @@ pub mod mdns {
                 additional_count: additional_count,
                 questions_answers: udp_payload[12..udp_payload.len()].to_vec(),
                 questions: vec![],
-                answers: vec![]
+                answers: vec![],
+                labels_by_index: HashMap::new()
             };
-            // let (last_questions_byte, questions) = packet.parse_mdns_questions();
-            // for q in &questions {
-            //     for label in &q.labels_raw {
-            //         let a: &mut Vec<u8> = &mut label.clone();
-            //         let s = from_utf8_mut(a);
-            //         match s {
-            //             Ok(ok) => {
-            //                 print!("{}", ok);
-            //             }
-            //             Err(_) => {
-            //                 print!("Error parsing label.");
-            //             }
-            //         }
-            //     }
-            //     println!()
-            // }
-            // let (last_answers_byte, answers) = MDNSPacket::parse_mdns_answers(packet.answer_count, &packet.questions_answers, last_questions_byte + 1);
             Some(packet)
+        }
+
+        fn parse_label(bytes: &[u8], start_index: usize) -> (usize, String)
+        {
+            let mut current_byte = bytes[start_index];
+            if (current_byte & 0b11000000) == 0b11000000 {
+                let pointer = (((current_byte & 0b00111111) as u16) << 8) | bytes[start_index + 1] as u16;
+                return (2, Self::parse_label(bytes, pointer as usize).1);
+            }
+            else {
+                let length = current_byte as usize;
+                let label_start_index = start_index + 1;
+                let label_end_index = label_start_index + length;
+                let label_raw = &bytes[label_start_index..label_end_index];
+                return (length + 1, from_utf8(&label_raw).unwrap().to_string());
+            }
         }
 
         fn parse_labels(bytes: &[u8], start_index: usize) -> (usize, Vec<String>)
         {
-            let label_length = 0;
-            let label = 1;
-            let mut state = label_length;
-            let mut labels_raw: Vec<Vec<u8>> = Vec::new();
-            let mut label_array: Vec<u8> = Vec::with_capacity(0);
             let mut byte_index = start_index;
-            let mut current_byte = bytes[byte_index];
-            while current_byte != 0 {
-                if state == label_length {
-                    let length = current_byte;
-                    label_array = Vec::with_capacity(length as usize);
-                    state = label;
-                }
-                else if state == label {
-                    label_array.push(current_byte);
-                    if label_array.capacity() == label_array.len(){
-                        labels_raw.push(label_array.clone());
-                        state = label_length;
-                    }
-                }
-                byte_index += 1;
-                current_byte = bytes.get(byte_index).unwrap_or(&0).clone();
+            let mut current_byte = Some(bytes[byte_index].clone());
+            let mut labels: Vec<String> = vec![];
+            let mut read_bytes_total = 0;
+            while current_byte.is_some() && current_byte.unwrap() != 0 {
+                let (read_bytes, label) = Self::parse_label(bytes, byte_index);
+                labels.push(label);
+                byte_index = byte_index + read_bytes;
+                current_byte = bytes.get(byte_index).map(|x| x.clone());
+                read_bytes_total += read_bytes;
             }
-
-            let mut labels_str = Vec::new();
-            for label_raw in labels_raw.clone() {
-                let s = from_utf8(&label_raw).unwrap();
-                labels_str.push(s.to_string())
-            }
-
-            // skip the 0 byte
-            return (byte_index, labels_str);
+            return (read_bytes_total, labels);
         }
 
         pub fn parse_mdns_questions(&self) -> (usize, Vec<MDNSQuestion>)
@@ -179,7 +164,7 @@ pub mod mdns {
                 for i in 0..rd_length {
                     rdata_raw.push(bytes[byte_index+i as usize])
                 }
-                let rdata_labels = Self::parse_labels(&rdata_raw, 0);
+                let rdata_labels = Self::parse_labels(&bytes, byte_index);
 
                 answers.push(MDNSAnswer{
                     labels_raw: labels_raw.to_vec(),
