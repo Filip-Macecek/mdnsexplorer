@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use crate::mdns::mdns::{MDNSPacket, MDNSQuestion};
+    use crate::mdns::mdns_packet::MDNSPacket;
 
     // id: 0, flags: 0, question_count: 1, answer_count: 0, authority_count: 0, additional_count: 0, label: _spotify-connect_tcplocal
     const RESOLVE_SPOTIFY_MDNS_PAYLOAD: [u8; 45] = [0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 16, 95, 115, 112, 111, 116, 105, 102, 121, 45, 99, 111, 110, 110, 101, 99, 116, 4, 95, 116, 99, 112, 5, 108, 111, 99, 97, 108, 0, 0, 12, 0, 1];
