@@ -5,11 +5,12 @@ use pnet::packet::ipv4::Ipv4Packet;
 use pnet::packet::Packet;
 use pnet::packet::udp::UdpPacket;
 use pnet::datalink::{channel, interfaces, Channel};
-use crate::mdns::mdns_packet::MDNSPacket;
+use crate::mdns::types::MDNSMessageHeader;
+use crate::mdns::parser::{is_mdns_packet, parse_mdns_header};
 
 pub fn start<F>(callback: F)
 where
-    F: Fn(&MDNSPacket)
+    F: Fn(&MDNSMessageHeader)
 {
     // Get the list of available network interfaces
     let interfaces = interfaces();
@@ -62,7 +63,7 @@ fn handle_ethernet_packet<'a>(eth_packet: &'a EthernetPacket<'a>) -> Option<Ipv4
     }
 }
 
-fn handle_ipv4_packet(ipv4_packet: &Ipv4Packet) -> Option<MDNSPacket> {
+fn handle_ipv4_packet(ipv4_packet: &Ipv4Packet) -> Option<MDNSMessageHeader> {
     // Extract source and destination IP addresses
     let src_ip = IpAddr::V4(ipv4_packet.get_source());
     let dst_ip = IpAddr::V4(ipv4_packet.get_destination());
@@ -72,12 +73,12 @@ fn handle_ipv4_packet(ipv4_packet: &Ipv4Packet) -> Option<MDNSPacket> {
     match ipv4_packet.get_next_level_protocol() {
         IpNextHeaderProtocols::Udp => {
             let udp_packet = UdpPacket::new(ipv4_packet.payload()).unwrap();
-            return if MDNSPacket::is_mdns_packet(&udp_packet) {
+            return if is_mdns_packet(&udp_packet) {
                 for c in udp_packet.payload() {
                     print!("{}, ", c);
                 }
                 println!();
-                MDNSPacket::parse_mdns_packet(&udp_packet.payload())
+                parse_mdns_header(&udp_packet.payload())
             } else {
                 None
             }

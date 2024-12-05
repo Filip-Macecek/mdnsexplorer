@@ -25,7 +25,11 @@ impl MDNSExplorerApplication {
             // TODO: Don't know how to kill it yet.
             s.spawn(|| {
                 capture::start(|mdns_message| {
-                    let model = MdnsMessageOverview::new(mdns_message.query_identifier, vec!(), vec!());
+                    let model = MdnsMessageOverview::new(
+                        mdns_message.query_identifier,
+                        vec!(),
+                        vec!()
+                    );
                     match view_model.lock() {
                         Ok(mut m) => {
                             println!("Capture thread: {}", m.mdns_message_overview_entries.len());

@@ -1,6 +1,7 @@
 #[cfg(test)]
 mod tests {
-    use crate::mdns::mdns_packet::MDNSPacket;
+    use crate::mdns::types::MDNSMessageHeader;
+    use crate::mdns::parser::{parse_mdns_answers, parse_mdns_header, parse_mdns_questions};
 
     // id: 0, flags: 0, question_count: 1, answer_count: 0, authority_count: 0, additional_count: 0, label: _spotify-connect_tcplocal
     const RESOLVE_SPOTIFY_MDNS_PAYLOAD: [u8; 45] = [0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 16, 95, 115, 112, 111, 116, 105, 102, 121, 45, 99, 111, 110, 110, 101, 99, 116, 4, 95, 116, 99, 112, 5, 108, 111, 99, 97, 108, 0, 0, 12, 0, 1];
@@ -14,7 +15,7 @@ mod tests {
 
     #[test]
     fn test_mdns_question_creation() {
-        let mdns_packet = MDNSPacket::parse_mdns_packet(&RESOLVE_SPOTIFY_MDNS_PAYLOAD);
+        let mdns_packet = parse_mdns_header(&RESOLVE_SPOTIFY_MDNS_PAYLOAD);
 
         assert!(mdns_packet.is_some());
         let mdns_packet_unwrapped = mdns_packet.unwrap();
@@ -27,9 +28,7 @@ mod tests {
 
     #[test]
     fn test_mdns_question_parsing() {
-        let mdns_packet = MDNSPacket::parse_mdns_packet(&RESOLVE_SPOTIFY_MDNS_PAYLOAD);
-
-        let mdns_questions = mdns_packet.unwrap().parse_mdns_questions();
+        let mdns_questions = parse_mdns_questions(1, &RESOLVE_SPOTIFY_MDNS_PAYLOAD, 12);
 
         assert_eq!(mdns_questions.1.len(), 1);
         let labels = &mdns_questions.1.first().unwrap().labels;
@@ -41,7 +40,7 @@ mod tests {
 
     #[test]
     fn test_mdns_answer_parsing() {
-        let mdns_answers = MDNSPacket::parse_mdns_answers(1, &ANSWER_MACHINE1_MDNS_PAYLOAD_ANSWERS_PART, 0);
+        let mdns_answers = parse_mdns_answers(1, &ANSWER_MACHINE1_MDNS_PAYLOAD_ANSWERS_PART, 0);
         let byte_reads = mdns_answers.0;
         assert_eq!(byte_reads, 34);
 
@@ -67,7 +66,7 @@ mod tests {
 
     #[test]
     fn test_mdns_answer_parsing_with_rdata_compression() {
-        let mdns_answers = MDNSPacket::parse_mdns_answers(1, &ANSWER_MACHINE1_MDNS_PAYLOAD_ANSWERS_WITH_REFERENCE_PART, 0);
+        let mdns_answers = parse_mdns_answers(1, &ANSWER_MACHINE1_MDNS_PAYLOAD_ANSWERS_WITH_REFERENCE_PART, 0);
         let byte_reads = mdns_answers.0;
         assert_eq!(byte_reads, 34);
 
