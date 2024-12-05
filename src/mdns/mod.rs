@@ -1,3 +1,3 @@
 mod tests;
 pub mod capture;
-mod mdns_packet;
+pub mod mdns_packet;

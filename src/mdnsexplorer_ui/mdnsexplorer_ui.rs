@@ -1,24 +1,53 @@
+use crate::mdnsexplorer_ui::mdns_message_table::{MdnsMessageOverview, MdnsMessageTable};
 use eframe::egui;
-use egui::{TextStyle, Widget};
+use egui::TextStyle;
 use egui_extras::{Size, StripBuilder};
-use crate::mdnsexplorer_ui::mdns_message_table::MdnsMessageTable;
+use std::sync::{Arc, Mutex};
 
-pub struct MdnsExplorerUi {
-    name: String,
-    age: u32,
+pub struct ViewModel {
+    pub mdns_message_overview_entries: Vec<MdnsMessageOverview>
 }
 
-impl Default for MdnsExplorerUi {
-    fn default() -> Self {
-        Self {
-            name: "Ahoj".to_owned(),
-            age: 0,
+pub struct MdnsExplorerUi<'l> {
+    name: String, // Test
+    age: u32,
+    view_model: &'l Arc<Mutex<ViewModel>>
+}
+
+impl MdnsExplorerUi<'_> {
+    pub fn run(view_model: &Arc<Mutex<ViewModel>>) {
+        let options = eframe::NativeOptions {
+            viewport: egui::ViewportBuilder::default().with_inner_size([320.0, 240.0]),
+            ..Default::default()
+        };
+        eframe::run_native(
+            "My egui App",
+            options,
+            Box::new(|cc| {
+                Ok(Box::<MdnsExplorerUi>::new(MdnsExplorerUi {
+                    age: 42,
+                    name: "Filip".parse().unwrap(),
+                    view_model: view_model
+                }))
+            }),
+        );
+    }
+
+    pub fn get(&self) -> Vec<MdnsMessageOverview>
+    {
+        match self.view_model.lock() {
+            Ok(m) => {
+                println!("UI Thread Get Called: {}", m.mdns_message_overview_entries.len());
+                m.mdns_message_overview_entries.clone()
+            }
+            Err(_) => { panic!("Nope.")}
         }
     }
 }
 
-impl eframe::App for MdnsExplorerUi {
+impl eframe::App for MdnsExplorerUi<'_> {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        println!("Mdns Explorer Update");
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.heading("My egui Application");
 
@@ -42,8 +71,7 @@ impl eframe::App for MdnsExplorerUi {
                 .vertical(|mut strip| {
                     strip.cell(|ui| {
                         egui::ScrollArea::horizontal().show(ui, |ui| {
-                            let mut a = MdnsMessageTable::default();
-                            a.render(ui, reset);
+                            MdnsMessageTable::new(self.get()).render(ui, reset);
                         });
                     });
                     strip.cell(|ui| {

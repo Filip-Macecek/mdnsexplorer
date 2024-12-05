@@ -7,6 +7,6 @@ use crate::mdnsexplorer_app::mdnsexplorer_app::MDNSExplorerApplication;
 
 // TODO: Run as administrator.
 fn main() {
-    let application = MDNSExplorerApplication::new();
-    application.start();
+    let mut application = MDNSExplorerApplication::new();
+    application.run();
 }
