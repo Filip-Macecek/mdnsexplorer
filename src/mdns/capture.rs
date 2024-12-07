@@ -1,13 +1,11 @@
-use std::net::IpAddr;
+use crate::mdns::mdns_message::MDNSMessage;
+use crate::mdns::parser::is_mdns_packet;
+use pnet::datalink::{channel, interfaces, Channel};
 use pnet::packet::ethernet::EthernetPacket;
 use pnet::packet::ip::IpNextHeaderProtocols;
 use pnet::packet::ipv4::Ipv4Packet;
-use pnet::packet::Packet;
 use pnet::packet::udp::UdpPacket;
-use pnet::datalink::{channel, interfaces, Channel};
-use crate::mdns::mdns_message::MDNSMessage;
-use crate::mdns::types::MDNSMessageHeader;
-use crate::mdns::parser::{is_mdns_packet, parse_mdns_header};
+use pnet::packet::Packet;
 
 pub fn start<F>(callback: F)
 where
@@ -65,12 +63,6 @@ fn handle_ethernet_packet<'a>(eth_packet: &'a EthernetPacket<'a>) -> Option<Ipv4
 }
 
 fn handle_ipv4_packet(ipv4_packet: &Ipv4Packet) -> Option<MDNSMessage> {
-    // Extract source and destination IP addresses
-    let src_ip = IpAddr::V4(ipv4_packet.get_source());
-    let dst_ip = IpAddr::V4(ipv4_packet.get_destination());
-
-    // println!("IPv4 Packet: {} -> {}", src_ip, dst_ip);
-
     match ipv4_packet.get_next_level_protocol() {
         IpNextHeaderProtocols::Udp => {
             let udp_packet = UdpPacket::new(ipv4_packet.payload()).unwrap();

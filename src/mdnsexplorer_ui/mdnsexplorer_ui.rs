@@ -20,10 +20,10 @@ impl MdnsExplorerUi<'_> {
             viewport: egui::ViewportBuilder::default().with_inner_size([320.0, 240.0]),
             ..Default::default()
         };
-        eframe::run_native(
+        let _ = eframe::run_native(
             "My egui App",
             options,
-            Box::new(|cc| {
+            Box::new(|_| {
                 Ok(Box::<MdnsExplorerUi>::new(MdnsExplorerUi {
                     age: 42,
                     name: "Filip".parse().unwrap(),
@@ -64,7 +64,7 @@ impl eframe::App for MdnsExplorerUi<'_> {
 
             ui.separator();
             let body_text_size = TextStyle::Body.resolve(ui.style()).size;
-            let mut reset = false;
+            let reset = false;
             StripBuilder::new(ui)
                 .size(Size::remainder().at_least(100.0)) // for the table
                 .size(Size::exact(body_text_size)) // for the source code link
@@ -75,7 +75,7 @@ impl eframe::App for MdnsExplorerUi<'_> {
                         });
                     });
                     strip.cell(|ui| {
-                        ui.vertical_centered(|ui| {
+                        ui.vertical_centered(|_| {
                         });
                     });
                 });

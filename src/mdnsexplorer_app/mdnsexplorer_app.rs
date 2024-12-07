@@ -1,7 +1,6 @@
 use crate::mdns::capture;
 use crate::mdnsexplorer_ui::mdns_message_table::MdnsMessageOverview;
 use crate::mdnsexplorer_ui::mdnsexplorer_ui::{MdnsExplorerUi, ViewModel};
-use pnet::packet::Packet;
 use std;
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -18,7 +17,7 @@ impl MDNSExplorerApplication {
 
     pub fn run(&mut self) {
         println!("Starting Mdns Explorer");
-        let mut view_model = Arc::new(Mutex::new(ViewModel {
+        let view_model = Arc::new(Mutex::new(ViewModel {
             mdns_message_overview_entries: vec![],
         }));
         thread::scope(|s| {

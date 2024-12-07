@@ -1,4 +1,3 @@
-use std::fmt::Display;
 use pnet::packet::Packet;
 use pnet::packet::udp::UdpPacket;
 use crate::mdns::types::{MDNSAnswer, MDNSMessageHeader, MDNSQuestion};

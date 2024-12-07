@@ -17,8 +17,8 @@ pub enum MDNSRecordType {
     ANY = 255,   // Wildcard match (any record type)
 
     // Uncommon or reserved types
-    HINFO = 13,  // Host information
-    MINFO = 14,  // Mailbox or mailing list information
+    // HINFO = 13,  // Host information
+    // MINFO = 14,  // Mailbox or mailing list information
     AXFR = 252,  // Request for zone transfer
     MAILB = 253, // Request for mailbox-related records
     MAILA = 254, // Request for mail agent records

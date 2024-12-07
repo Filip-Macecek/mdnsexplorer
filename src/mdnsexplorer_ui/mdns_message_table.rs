@@ -1,4 +1,3 @@
-use std::cell::Ref;
 use eframe::egui;
 
 pub struct MdnsMessageOverview {
@@ -94,8 +93,8 @@ impl MdnsMessageTable {
                     ui.strong("Answers");
                 });
             })
-            .body(|mut body| {
-                let row_height = |i: usize| if thick_row(i) { 30.0 } else { 18.0 };
+            .body(|body| {
+                // let row_height = |i: usize| if thick_row(i) { 30.0 } else { 18.0 };
                 let _ = body.rows(30f32, self.overviews.len(), | mut row| {
                     let row_index = row.index();
 

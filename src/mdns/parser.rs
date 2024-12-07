@@ -30,16 +30,16 @@ pub fn parse_mdns_questions(question_count: usize, bytes: &[u8], start_index: us
 {
     let mut questions = Vec::with_capacity(question_count);
     let mut byte_index: usize = start_index;
-    for i in 0..question_count
+    for _ in 0..question_count
     {
-        let mut current_byte = bytes[byte_index];
         let (bytes_read, labels_str) = parse_labels(&bytes, byte_index);
         let labels_raw = &bytes[byte_index..(byte_index + bytes_read)];
         byte_index += bytes_read;
-        current_byte = bytes[byte_index];
+        let question_data = &bytes[byte_index..(byte_index + 4)];
+        byte_index += 4;
 
-        let question_type = ((current_byte as u16) << 8) | (bytes[byte_index + 1] as u16);
-        let question_class = ((bytes[byte_index + 2] as u16) << 8) | (bytes[byte_index + 3] as u16);
+        let question_type = ((question_data[0] as u16) << 8) | (question_data[1] as u16);
+        let question_class = ((question_data[2] as u16) << 8) | (question_data[3] as u16);
 
         questions.push(MDNSQuestion {
             labels_raw: labels_raw.to_vec(),
@@ -47,7 +47,6 @@ pub fn parse_mdns_questions(question_count: usize, bytes: &[u8], start_index: us
             question_type: question_type,
             question_class: question_class
         });
-        byte_index += 4;
     }
     return (byte_index - 1, questions);
 }
@@ -86,7 +85,7 @@ pub fn parse_mdns_answers(answer_count: u16, bytes: &[u8], start_byte: usize) ->
 
         let record_type = MDNSRecordType::from_u16(answer_type).expect("Invalid answer type.");
         let rdata_labels = match record_type {
-            (MDNSRecordType::A) => None,
+            MDNSRecordType::A => None,
             _ => Some(parse_labels(&bytes, byte_index).1)
         };
 
