@@ -50,6 +50,7 @@ impl MDNSRecordType {
 pub struct MDNSQuestion{
     pub labels_raw: Vec<u8>,
     pub labels: Vec<String>,
+    pub name: String,
     pub question_type: u16, // first byte is terminator for labels and as such is always 0
     pub question_class: u16
 }
@@ -57,6 +58,7 @@ pub struct MDNSQuestion{
 pub struct MDNSAnswer{
     pub labels_raw: Vec<u8>,
     pub labels: Vec<String>,
+    pub name: String,
     pub answer_type: u16, // first byte is terminator for labels and as such is always 0
     pub answer_class: u16,
     pub ttl: u32,

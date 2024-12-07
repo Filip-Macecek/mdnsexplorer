@@ -40,10 +40,12 @@ pub fn parse_mdns_questions(question_count: usize, bytes: &[u8], start_index: us
 
         let question_type = ((question_data[0] as u16) << 8) | (question_data[1] as u16);
         let question_class = ((question_data[2] as u16) << 8) | (question_data[3] as u16);
+        let name = labels_str.join(".");
 
         questions.push(MDNSQuestion {
             labels_raw: labels_raw.to_vec(),
             labels: labels_str,
+            name: name,
             question_type: question_type,
             question_class: question_class
         });
@@ -92,6 +94,7 @@ pub fn parse_mdns_answers(answer_count: u16, bytes: &[u8], start_byte: usize) ->
         answers.push(MDNSAnswer {
             labels_raw: labels_raw.to_vec(),
             labels: labels_str.iter().map(|l| l.to_string()).collect(),
+            name: labels_str.join("."),
             answer_type: answer_type,
             answer_class: answer_class,
             ttl: ttl,
@@ -109,19 +112,19 @@ fn is_label_pointer(byte: u8) -> bool
     return (byte & 0b11000000) == 0b11000000;
 }
 
+fn get_pointer(firstByte: u8, secondByte: u8) -> u16
+{
+    return (((firstByte & 0b00111111) as u16) << 8) | secondByte as u16;
+}
+
 fn parse_label(bytes: &[u8], start_index: usize) -> (usize, String)
 {
     let mut current_byte = bytes[start_index];
-    if is_label_pointer(current_byte) {
-        let pointer = (((current_byte & 0b00111111) as u16) << 8) | bytes[start_index + 1] as u16;
-        return (2, parse_label(bytes, pointer as usize).1);
-    } else {
-        let length = current_byte as usize;
-        let label_start_index = start_index + 1;
-        let label_end_index = label_start_index + length;
-        let label_raw = &bytes[label_start_index..label_end_index];
-        return (length + 1, from_utf8(&label_raw).unwrap().to_string());
-    }
+    let length = current_byte as usize;
+    let label_start_index = start_index + 1;
+    let label_end_index = label_start_index + length;
+    let label_raw = &bytes[label_start_index..label_end_index];
+    return (length + 1, from_utf8(&label_raw).unwrap().to_string());
 }
 
 fn parse_labels(bytes: &[u8], start_index: usize) -> (usize, Vec<String>)
@@ -133,11 +136,18 @@ fn parse_labels(bytes: &[u8], start_index: usize) -> (usize, Vec<String>)
     while bytes.get(byte_index).is_some() && bytes[byte_index] != 0 && !has_a_pointer {
         if is_label_pointer(bytes[byte_index]) {
             has_a_pointer = true;
+            let referenced_byte_index = get_pointer(bytes[byte_index], bytes[byte_index + 1]);
+            let (_, referenced_labels) = parse_labels(bytes, referenced_byte_index as usize);
+            referenced_labels.iter().for_each(|l| labels.push(l.to_owned()));
+            byte_index += 2; // Skip the pointer.
+            read_bytes_total += 2;
         }
-        let (read_bytes, label) = parse_label(bytes, byte_index);
-        labels.push(label);
-        byte_index = byte_index + read_bytes;
-        read_bytes_total += read_bytes;
+        else {
+            let (read_bytes, label) = parse_label(bytes, byte_index);
+            labels.push(label);
+            byte_index = byte_index + read_bytes;
+            read_bytes_total += read_bytes;
+        }
     }
 
     if has_a_pointer {
