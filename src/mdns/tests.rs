@@ -13,6 +13,34 @@ mod tests {
     const ANSWER_MACHINE1_MDNS_PAYLOAD_ANSWERS_WITH_REFERENCE_PART: [u8; 34] = [5, 95, 104, 116, 116, 112, 4, 95, 116, 99, 112, 5, 108, 111, 99, 97, 108, 0, 0, 12, 0, 1, 0, 0, 17, 148, 0, 6, 3, 104, 117, 98, 192, 0];
     // 3, 104, 117, 98, 192, 12, 192, 40, 0, 47, 128, 1, 0, 0, 0, 120, 0, 8, 192, 40, 0, 4, 0, 0, 0, 8, 192, 40, 0, 1, 128, 1, 0, 0, 0, 120, 0, 4, 192, 168, 100, 24, 192, 40, 0, 33, 128, 1, 0, 0, 0, 120, 0, 8, 0, 0, 0, 0, 216, 71, 192, 40, 192, 40, 0, 16, 128, 1, 0, 0, 17, 148, 0, 0];
 
+    const MDNS_ANSWER_1: [u8; 114] = [
+        // Header
+        0, 0, 132, 0, 0, 0, 0, 5, 0, 0, 0, 0,
+        // Answer #1 - PTR Record _http._tcp.local.
+        5, 95, 104, 116, 116, 112, 4, 95, 116, 99, 112, 5, 108, 111, 99, 97, 108, 0,
+        // info
+        0, 12, 0, 1, 0, 0, 17, 148, 0, 6,
+        // rdata
+        3, 104, 117, 98, 192, 12,
+        // Answer #2 - SRV Record
+        192, 40,
+        // info
+        0, 33, 128, 1, 0, 0, 0, 120, 0, 8,
+        0, 0, 0, 0, 211, 149, 192, 40, 192, 40, 0, 16, 128, 1, 0, 0, 17, 148, 0, 0, 192, 40,
+        0, 47, 128, 1, 0, 0, 0, 120, 0, 8, 192, 40, 0, 4, 0, 0, 0, 8, 192, 40, 0, 1, 128, 1, 0, 0, 0, 120, 0, 4, 192, 168, 100, 25
+    ];
+
+    const MDNS_ANSWER_2: [u8; 100] = [
+        // Header
+        0, 0, 132, 0, 0, 0, 0, 4, 0, 0, 0, 0,
+        // first answers labels
+        3, 104, 117, 98, 5, 95, 104, 116, 116, 112, 4, 95, 116, 99, 112, 5, 108, 111, 99, 97, 108, 0,
+        // first answer data info
+        0, 16, 128, 1, 0, 0, 17, 148, 0, 0,
+        192, 12,
+        // second answer
+        0, 1, 128, 1, 0, 0, 0, 120, 0, 4, 192, 168, 100, 24, 192, 12, 0, 47, 128, 1, 0, 0, 0, 120, 0, 8, 192, 12, 0, 4, 0, 0, 0, 8, 192, 12, 0, 33, 128, 1, 0, 0, 0, 120, 0, 8, 0, 0, 0, 0, 227, 155, 192, 12];
+    
     #[test]
     fn test_mdns_question_creation() {
         let mdns_packet = parse_mdns_header(&RESOLVE_SPOTIFY_MDNS_PAYLOAD);
@@ -88,5 +116,25 @@ mod tests {
         assert_eq!(labels.get(0).unwrap(), "_http");
         assert_eq!(labels.get(1).unwrap(), "_tcp");
         assert_eq!(labels.get(2).unwrap(), "local");
+    }
+
+    #[test]
+    fn test_mdns_answer1() {
+        let mdns_answers = parse_mdns_answers(5, &MDNS_ANSWER_1, 12);
+        let byte_reads = mdns_answers.0;
+        assert_eq!(byte_reads, 114);
+
+        assert_eq!(mdns_answers.1.len(), 5);
+        // TODO: Complete the assert section.
+    }
+
+    #[test]
+    fn test_mdns_answer_2() {
+        let mdns_answers = parse_mdns_answers(4, &MDNS_ANSWER_2, 12);
+        let byte_reads = mdns_answers.0;
+        assert_eq!(byte_reads, 100);
+
+        assert_eq!(mdns_answers.1.len(), 4);
+        // TODO: Complete the assert section.
     }
 }

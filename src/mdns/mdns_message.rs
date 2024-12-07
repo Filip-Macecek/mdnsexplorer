@@ -1,12 +1,13 @@
+use std::fmt::Display;
 use pnet::packet::Packet;
 use pnet::packet::udp::UdpPacket;
 use crate::mdns::types::{MDNSAnswer, MDNSMessageHeader, MDNSQuestion};
 use crate::mdns::parser::{parse_mdns_answers, parse_mdns_header, parse_mdns_questions};
 
 pub struct MDNSMessage {
-    header: MDNSMessageHeader,
-    questions: Vec<MDNSQuestion>,
-    answers: Vec<MDNSAnswer>
+    pub header: MDNSMessageHeader,
+    pub questions: Vec<MDNSQuestion>,
+    pub answers: Vec<MDNSAnswer>
 }
 
 impl MDNSMessage {

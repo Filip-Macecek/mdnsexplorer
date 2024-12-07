@@ -1,6 +1,6 @@
 use std::str::from_utf8;
 use pnet::packet::udp::UdpPacket;
-use crate::mdns::types::{MDNSAnswer, MDNSMessageHeader, MDNSQuestion};
+use crate::mdns::types::{MDNSAnswer, MDNSMessageHeader, MDNSQuestion, MDNSRecordType};
 
 pub fn is_mdns_packet(udp_packet: &UdpPacket) -> bool {
     udp_packet.get_source() == 5353 || udp_packet.get_destination() == 5353
@@ -35,7 +35,7 @@ pub fn parse_mdns_questions(question_count: usize, bytes: &[u8], start_index: us
         let mut current_byte = bytes[byte_index];
         let (bytes_read, labels_str) = parse_labels(&bytes, byte_index);
         let labels_raw = &bytes[byte_index..(byte_index + bytes_read)];
-        byte_index += bytes_read + 1;
+        byte_index += bytes_read;
         current_byte = bytes[byte_index];
 
         let question_type = ((current_byte as u16) << 8) | (bytes[byte_index + 1] as u16);
@@ -58,26 +58,37 @@ pub fn parse_mdns_answers(answer_count: u16, bytes: &[u8], start_byte: usize) ->
     let mut byte_index: usize = start_byte;
     for i in 0..answer_count
     {
+        println!("Parsing answer number {}", i+1);
         let mut current_byte = bytes[byte_index];
-        let (bytes_read, labels_str) = parse_labels(bytes, 0);
-        let labels_raw = &bytes[byte_index..(bytes_read + 1)];
-        byte_index += bytes_read + 1;
+        let (bytes_read, labels_str) = parse_labels(bytes, byte_index);
+        let labels_raw = &bytes[byte_index..(byte_index + bytes_read)];
+        println!("Labels: {:?}, bytes read: {}", labels_str, bytes_read);
+        byte_index += bytes_read;
         current_byte = bytes[byte_index];
+        let info_bytes = &bytes[byte_index..(byte_index + 10)];
+        println!("Info bytes: {:?}", info_bytes);
 
-        let answer_type = ((current_byte as u16) << 8) | (bytes[byte_index + 1] as u16);
-        let answer_class = ((bytes[byte_index + 2] as u16) << 8) | (bytes[byte_index + 3] as u16);
-        let ttl: u32 = (((bytes[byte_index + 4] as u32) << 24)
-            | ((bytes[byte_index + 5] as u32) << 16)
-            | (bytes[byte_index + 6] as u32) << 8)
-            | (bytes[byte_index + 7] as u32);
-        let rd_length: u16 = ((bytes[byte_index + 8] as u16) << 8) | (bytes[byte_index + 9] as u16);
+        let answer_type = ((info_bytes[0] as u16) << 8) | (info_bytes[1] as u16);
+        let answer_class = ((info_bytes[2] as u16) << 8) | (info_bytes[3] as u16);
+        let ttl: u32 = (((info_bytes[4] as u32) << 24)
+            | ((info_bytes[5] as u32) << 16)
+            | (info_bytes[6] as u32) << 8)
+            | (info_bytes[7] as u32);
+        let rd_length: u16 = ((info_bytes[8] as u16) << 8) | (info_bytes[9] as u16);
+        println!("current_byte: {}", current_byte);
+        println!("rd_length: {}", rd_length);
         let mut rdata_raw: Vec<u8> = Vec::with_capacity(rd_length as usize);
 
         byte_index += 10;
         for i in 0..rd_length {
             rdata_raw.push(bytes[byte_index + i as usize])
         }
-        let rdata_labels = parse_labels(&bytes, byte_index);
+
+        let record_type = MDNSRecordType::from_u16(answer_type).expect("Invalid answer type.");
+        let rdata_labels = match record_type {
+            (MDNSRecordType::A) => None,
+            _ => Some(parse_labels(&bytes, byte_index).1)
+        };
 
         answers.push(MDNSAnswer {
             labels_raw: labels_raw.to_vec(),
@@ -87,17 +98,22 @@ pub fn parse_mdns_answers(answer_count: u16, bytes: &[u8], start_byte: usize) ->
             ttl: ttl,
             rd_length: rd_length,
             rdata_raw: rdata_raw,
-            rdata_labels: Some(rdata_labels.1)
+            rdata_labels: rdata_labels
         });
-        byte_index += (rd_length + 1) as usize;
+        byte_index += rd_length as usize;
     }
-    return (byte_index - 1, answers);
+    return (byte_index, answers);
+}
+
+fn is_label_pointer(byte: u8) -> bool
+{
+    return (byte & 0b11000000) == 0b11000000;
 }
 
 fn parse_label(bytes: &[u8], start_index: usize) -> (usize, String)
 {
     let mut current_byte = bytes[start_index];
-    if (current_byte & 0b11000000) == 0b11000000 {
+    if is_label_pointer(current_byte) {
         let pointer = (((current_byte & 0b00111111) as u16) << 8) | bytes[start_index + 1] as u16;
         return (2, parse_label(bytes, pointer as usize).1);
     } else {
@@ -112,15 +128,24 @@ fn parse_label(bytes: &[u8], start_index: usize) -> (usize, String)
 fn parse_labels(bytes: &[u8], start_index: usize) -> (usize, Vec<String>)
 {
     let mut byte_index = start_index;
-    let mut current_byte = Some(bytes[byte_index].clone());
     let mut labels: Vec<String> = vec![];
     let mut read_bytes_total = 0;
-    while current_byte.is_some() && current_byte.unwrap() != 0 {
+    let mut has_a_pointer = false;
+    while bytes.get(byte_index).is_some() && bytes[byte_index] != 0 && !has_a_pointer {
+        if is_label_pointer(bytes[byte_index]) {
+            has_a_pointer = true;
+        }
         let (read_bytes, label) = parse_label(bytes, byte_index);
         labels.push(label);
         byte_index = byte_index + read_bytes;
-        current_byte = bytes.get(byte_index).map(|x| x.clone());
         read_bytes_total += read_bytes;
     }
-    return (read_bytes_total, labels);
+
+    if has_a_pointer {
+        (read_bytes_total, labels)
+    }
+    else{
+        // Domain name either ends with a 0 or a pointer. If it does not end with a pointer, read also the 0.
+        (read_bytes_total + 1, labels)
+    }
 }

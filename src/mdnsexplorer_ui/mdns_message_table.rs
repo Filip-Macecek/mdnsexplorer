@@ -72,8 +72,8 @@ impl MdnsMessageTable {
             .striped(self.striped)
             .resizable(self.resizable)
             .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
-            .column(Column::auto())
-            .column(Column::auto())
+            .column(Column::initial(250 as f32))
+            .column(Column::initial(250 as f32))
             .min_scrolled_height(0.0)
             .max_scroll_height(available_height);
 
