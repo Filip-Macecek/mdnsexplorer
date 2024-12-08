@@ -1,5 +1,4 @@
 use crate::mdns::mdns_message::MDNSMessage;
-use crate::mdns::parser::is_mdns_packet;
 use pnet::datalink::{channel, interfaces, Channel};
 use pnet::packet::ethernet::EthernetPacket;
 use pnet::packet::ip::IpNextHeaderProtocols;
@@ -66,7 +65,8 @@ fn handle_ipv4_packet(ipv4_packet: &Ipv4Packet) -> Option<MDNSMessage> {
     match ipv4_packet.get_next_level_protocol() {
         IpNextHeaderProtocols::Udp => {
             let udp_packet = UdpPacket::new(ipv4_packet.payload()).unwrap();
-            return if is_mdns_packet(&udp_packet) {
+            return if udp_packet.get_source() == 5353 || udp_packet.get_destination() == 5353
+            {
                 for c in udp_packet.payload() {
                     print!("{}, ", c);
                 }

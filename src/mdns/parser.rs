@@ -1,160 +1,277 @@
-use std::str::from_utf8;
+use crate::mdns::mdns_message::MDNSMessage;
+use crate::mdns::types::{MDNSAnswer, MDNSMessageHeader, MDNSQueryClass, MDNSQuestion, MDNSRData, MDNSRecordType};
 use pnet::packet::udp::UdpPacket;
-use crate::mdns::types::{MDNSAnswer, MDNSMessageHeader, MDNSQuestion, MDNSRecordType};
+use std::fmt::{Debug, Display};
+use std::net::{Ipv4Addr, Ipv6Addr};
+use std::str::from_utf8;
+use std::string::ParseError;
 
-pub fn is_mdns_packet(udp_packet: &UdpPacket) -> bool {
-    udp_packet.get_source() == 5353 || udp_packet.get_destination() == 5353
+pub struct ByteReader {
+    bytes: Vec<u8>,
+    byte_index: usize,
 }
 
-pub fn parse_mdns_header(udp_payload: &[u8]) -> Option<MDNSMessageHeader> {
-    let query_identifier = ((udp_payload[0] as u16) << 8) | udp_payload[1] as u16;
-    let flags = ((udp_payload[2] as u16) << 8) | udp_payload[3] as u16;
-    let question_count = ((udp_payload[4] as u16) << 8) | udp_payload[5] as u16;
-    let answer_count = ((udp_payload[6] as u16) << 8) | udp_payload[7] as u16;
-    let authority_count = ((udp_payload[8] as u16) << 8) | udp_payload[9] as u16;
-    let additional_count = ((udp_payload[10] as u16) << 8) | udp_payload[11] as u16;
-
-    let packet = MDNSMessageHeader {
-        raw: udp_payload.to_vec(),
-        query_identifier: query_identifier,
-        flags: flags,
-        question_count: question_count,
-        answer_count: answer_count,
-        authority_count: authority_count,
-        additional_count: additional_count
-    };
-    Some(packet)
-}
-
-pub fn parse_mdns_questions(question_count: usize, bytes: &[u8], start_index: usize) -> (usize, Vec<MDNSQuestion>)
-{
-    let mut questions = Vec::with_capacity(question_count);
-    let mut byte_index: usize = start_index;
-    for _ in 0..question_count
+impl ByteReader {
+    fn peak_byte(&mut self) -> Option<u8>
     {
-        let (bytes_read, labels_str) = parse_labels(&bytes, byte_index);
-        let labels_raw = &bytes[byte_index..(byte_index + bytes_read)];
-        byte_index += bytes_read;
-        let question_data = &bytes[byte_index..(byte_index + 4)];
-        byte_index += 4;
-
-        let question_type = ((question_data[0] as u16) << 8) | (question_data[1] as u16);
-        let question_class = ((question_data[2] as u16) << 8) | (question_data[3] as u16);
-        let name = labels_str.join(".");
-
-        questions.push(MDNSQuestion {
-            labels_raw: labels_raw.to_vec(),
-            labels: labels_str,
-            name: name,
-            question_type: question_type,
-            question_class: question_class
-        });
+        let byte = self.bytes.get(self.byte_index).map(|b| b.to_owned());
+        return byte;
     }
-    return (byte_index - 1, questions);
+
+    fn read_byte(&mut self) -> Option<u8>
+    {
+        let byte = self.bytes.get(self.byte_index).map(|b| b.to_owned());
+        if byte.is_some() {
+            self.byte_index += 1;
+        }
+        return byte;
+    }
+
+    fn read_u16(&mut self) -> Option<u16>
+    {
+        let first_byte = self.read_byte().map(|b| b as u16);
+        return first_byte.map(|first| {
+            let second_byte = self.read_byte().map(|b| b as u16);
+            return second_byte.map(|second| first << 8 | second)
+        }).flatten();
+    }
+
+    fn read_u32(&mut self) -> Option<u32>
+    {
+        let mut result: u32 = 0;
+        for i in (0..4).rev()
+        {
+            result |= (self.read_byte()? as u32) << (i*8);
+        }
+        return Some(result);
+    }
+
+    fn read_n(&mut self, bytes_count: usize) -> Option<Vec<u8>>
+    {
+        let mut buffer: Vec<u8> = Vec::with_capacity(bytes_count);
+        for _ in 0..bytes_count {
+            buffer.push(self.read_byte()?)
+        }
+        Some(buffer)
+    }
 }
 
-pub fn parse_mdns_answers(answer_count: u16, bytes: &[u8], start_byte: usize) -> (usize, Vec<MDNSAnswer>)
-{
-    let mut answers = Vec::with_capacity(answer_count as usize);
-    let mut byte_index: usize = start_byte;
-    for i in 0..answer_count
+pub struct MDNSParser {
+    reader: ByteReader
+}
+
+impl MDNSParser {
+    pub fn new(bytes: &[u8]) -> MDNSParser
     {
-        println!("Parsing answer number {}", i+1);
-        let mut current_byte = bytes[byte_index];
-        let (bytes_read, labels_str) = parse_labels(bytes, byte_index);
-        let labels_raw = &bytes[byte_index..(byte_index + bytes_read)];
-        println!("Labels: {:?}, bytes read: {}", labels_str, bytes_read);
-        byte_index += bytes_read;
-        current_byte = bytes[byte_index];
-        let info_bytes = &bytes[byte_index..(byte_index + 10)];
-        println!("Info bytes: {:?}", info_bytes);
-
-        let answer_type = ((info_bytes[0] as u16) << 8) | (info_bytes[1] as u16);
-        let answer_class = ((info_bytes[2] as u16) << 8) | (info_bytes[3] as u16);
-        let ttl: u32 = (((info_bytes[4] as u32) << 24)
-            | ((info_bytes[5] as u32) << 16)
-            | (info_bytes[6] as u32) << 8)
-            | (info_bytes[7] as u32);
-        let rd_length: u16 = ((info_bytes[8] as u16) << 8) | (info_bytes[9] as u16);
-        println!("current_byte: {}", current_byte);
-        println!("rd_length: {}", rd_length);
-        let mut rdata_raw: Vec<u8> = Vec::with_capacity(rd_length as usize);
-
-        byte_index += 10;
-        for i in 0..rd_length {
-            rdata_raw.push(bytes[byte_index + i as usize])
+        Self {
+            reader: ByteReader {
+                bytes: bytes.to_owned(),
+                byte_index: 0
+            }
         }
+    }
 
-        let record_type = MDNSRecordType::from_u16(answer_type).expect("Invalid answer type.");
-        let rdata_labels = match record_type {
-            MDNSRecordType::A => None,
-            _ => Some(parse_labels(&bytes, byte_index).1)
+    pub fn parse(&mut self) -> Result<MDNSMessage, ParseError>
+    {
+        let header = self.parse_mdns_header().expect("Could not parse MDNS header.");
+        let questions = self.parse_mdns_questions(header.question_count as usize);
+        let answers = self.parse_mdns_answers(header.answer_count as usize);
+        Ok(MDNSMessage {
+            header,
+            questions,
+            answers
+        })
+    }
+
+    fn parse_mdns_header(&mut self) -> Option<MDNSMessageHeader> {
+        let query_identifier = self.reader.read_u16().expect("Could not read MDNS query ID.");
+        let flags = self.reader.read_u16().expect("Could not read MDNS flags.");
+        let question_count = self.reader.read_u16().expect("Could not read MDNS Question Count.");
+        let answer_count = self.reader.read_u16().expect("Could not read MDNS Answer Count.");
+        let authority_count = self.reader.read_u16().expect("Could not read MDNS Authority Count.");
+        let additional_count = self.reader.read_u16().expect("Could not read MDNS Additional Count.");
+
+        let packet = MDNSMessageHeader {
+            query_identifier: query_identifier,
+            flags: flags,
+            question_count: question_count,
+            answer_count: answer_count,
+            authority_count: authority_count,
+            additional_count: additional_count
         };
-
-        answers.push(MDNSAnswer {
-            labels_raw: labels_raw.to_vec(),
-            labels: labels_str.iter().map(|l| l.to_string()).collect(),
-            name: labels_str.join("."),
-            answer_type: answer_type,
-            answer_class: answer_class,
-            ttl: ttl,
-            rd_length: rd_length,
-            rdata_raw: rdata_raw,
-            rdata_labels: rdata_labels
-        });
-        byte_index += rd_length as usize;
+        Some(packet)
     }
-    return (byte_index, answers);
-}
 
-fn is_label_pointer(byte: u8) -> bool
-{
-    return (byte & 0b11000000) == 0b11000000;
-}
+    fn parse_mdns_questions(&mut self, question_count: usize) -> Vec<MDNSQuestion>
+    {
+        let mut questions = Vec::with_capacity(question_count);
+        for _ in 0..question_count
+        {
+            let name = Self::parse_name(&mut self.reader);
 
-fn get_pointer(firstByte: u8, secondByte: u8) -> u16
-{
-    return (((firstByte & 0b00111111) as u16) << 8) | secondByte as u16;
-}
+            let question_type = self.reader.read_u16().expect("Could not read question type.");
+            // disregard the 3rd byte of the sequence -> class is either 1 or 255 (IN or ANY)
+            // The first byte can contain cache flush flag which is not relevant to MDNS as per RFC 6762 - 10.2
+            _ = self.reader.read_byte().expect("Could not read next byte.");
+            let question_class = self.reader.read_byte().expect("Could not read question class.") as u16;
 
-fn parse_label(bytes: &[u8], start_index: usize) -> (usize, String)
-{
-    let mut current_byte = bytes[start_index];
-    let length = current_byte as usize;
-    let label_start_index = start_index + 1;
-    let label_end_index = label_start_index + length;
-    let label_raw = &bytes[label_start_index..label_end_index];
-    return (length + 1, from_utf8(&label_raw).unwrap().to_string());
-}
-
-fn parse_labels(bytes: &[u8], start_index: usize) -> (usize, Vec<String>)
-{
-    let mut byte_index = start_index;
-    let mut labels: Vec<String> = vec![];
-    let mut read_bytes_total = 0;
-    let mut has_a_pointer = false;
-    while bytes.get(byte_index).is_some() && bytes[byte_index] != 0 && !has_a_pointer {
-        if is_label_pointer(bytes[byte_index]) {
-            has_a_pointer = true;
-            let referenced_byte_index = get_pointer(bytes[byte_index], bytes[byte_index + 1]);
-            let (_, referenced_labels) = parse_labels(bytes, referenced_byte_index as usize);
-            referenced_labels.iter().for_each(|l| labels.push(l.to_owned()));
-            byte_index += 2; // Skip the pointer.
-            read_bytes_total += 2;
+            questions.push(MDNSQuestion {
+                name: name,
+                question_type: MDNSRecordType::from_u16(question_type).expect(format!("Could not read question type: {}", question_type).as_str()),
+                question_class: MDNSQueryClass::from_u16(question_class).expect(format!("Could not read question class: {}", question_class).as_str()),
+            });
         }
-        else {
-            let (read_bytes, label) = parse_label(bytes, byte_index);
-            labels.push(label);
-            byte_index = byte_index + read_bytes;
-            read_bytes_total += read_bytes;
+        return questions
+    }
+
+    fn parse_mdns_answers(&mut self, answer_count: usize) -> Vec<MDNSAnswer>
+    {
+        let mut answers = Vec::with_capacity(answer_count);
+        for i in 0..answer_count
+        {
+            println!("Parsing answer number {}", i+1);
+            let name = Self::parse_name(&mut self.reader);
+            println!("Parsing answer name {}", name);
+            println!("current byte index: {}", self.reader.byte_index);
+
+            let answer_type = self.reader.read_u16().expect("Could not read answer type.");
+
+            // disregard the 1st byte of the sequence -> class is either 1 or 255 (IN or ANY)
+            // The first byte can contain cache flush flag which is not relevant to MDNS as per RFC 6762 - 10.2
+            _ = self.reader.read_byte().expect("Could not read next byte.");
+            let answer_class = self.reader.read_byte().expect("Could not read question class.") as u16;
+            let ttl = self.reader.read_u32().expect("Could not read ttl.");
+            let rd_length = self.reader.read_u16().expect("Could not read record length.");
+
+            println!("Parsing answer record length {}", rd_length);
+            println!("current byte index {}", self.reader.byte_index);
+
+            let record_type = MDNSRecordType::from_u16(answer_type).expect("Invalid answer type.");
+            let rdata = self.parse_rdata(record_type, rd_length);
+
+            answers.push(MDNSAnswer {
+                name: name,
+                answer_type: record_type,
+                answer_class: MDNSQueryClass::from_u16(answer_class).expect("Invalid answer class."),
+                ttl_seconds: ttl,
+                rd_length: rd_length,
+                rdata: rdata
+            });
+        }
+        return answers
+    }
+
+    fn parse_rdata(&mut self, record_type: MDNSRecordType, rd_length: u16) -> MDNSRData
+    {
+        match record_type {
+            MDNSRecordType::A => MDNSRData::A {
+                ipv4_address: Ipv4Addr::from(self.reader.read_u32().expect("Could not read ipv4 address.")),
+            },
+            MDNSRecordType::NS => MDNSRData::OTHER {
+                raw: self.reader.read_n(rd_length as usize).expect("Could not read other data."),
+            },
+            MDNSRecordType::CNAME => MDNSRData::CNAME {
+                canonical_domain_name: Self::parse_name(&mut self.reader),
+            },
+            MDNSRecordType::SOA => MDNSRData::OTHER {
+                raw: self.reader.read_n(rd_length as usize).expect("Could not read other data."),
+            },
+            MDNSRecordType::PTR => MDNSRData::PTR {
+                domain_name: Self::parse_name(&mut self.reader),
+            },
+            MDNSRecordType::MX => MDNSRData::OTHER {
+                raw: self.reader.read_n(rd_length as usize).expect("Could not read other data."),
+            },
+            MDNSRecordType::TXT => MDNSRData::TXT {
+                text: "".to_string(),
+            },
+            MDNSRecordType::AAAA => {
+                let ip_bytes_dynamic = self.reader.read_n(16).expect("Could not read ipv6 address.");
+                let ip_bytes_static: Result<[u8; 16], Vec<u8>> = <[u8; 16]>::try_from(ip_bytes_dynamic);
+                MDNSRData::AAAA {
+                    ipv6_addr: Ipv6Addr::from(ip_bytes_static.expect("Could not read ipv6 address.")),
+                }
+            },
+            MDNSRecordType::SRV => MDNSRData::SRV {
+                priority: self.reader.read_u16().expect("Could not read priority."),
+                weight: self.reader.read_u16().expect("Could not read weight."),
+                port: self.reader.read_u16().expect("Could not read port."),
+                target_domain_name: Self::parse_name(&mut self.reader)
+            },
+            MDNSRecordType::NSEC | MDNSRecordType::OPT | MDNSRecordType::ANY | MDNSRecordType::AXFR | MDNSRecordType::MAILB | MDNSRecordType::MAILA => MDNSRData::OTHER {
+                raw: self.reader.read_n(rd_length as usize).expect("Could not read other data."),
+            }
         }
     }
 
-    if has_a_pointer {
-        (read_bytes_total, labels)
+    fn parse_label(reader: &mut ByteReader) -> String
+    {
+        let length = reader.read_byte().expect("Could not read label length.");
+        let label_raw = reader.read_n(length as usize).expect("Could not read label.");
+        return from_utf8(&label_raw).expect(format!("Could not read label data: {:?}.", label_raw).as_str()).to_string();
     }
-    else{
-        // Domain name either ends with a 0 or a pointer. If it does not end with a pointer, read also the 0.
-        (read_bytes_total + 1, labels)
+
+    fn parse_name(reader: &mut ByteReader) -> String
+    {
+        let mut labels: Vec<String> = vec![];
+        let mut peaked_byte = reader.peak_byte();
+        let mut referenced_name: Option<String> = None;
+        while peaked_byte.is_some() && peaked_byte.unwrap() != 0 && referenced_name.is_none() {
+            if Self::is_label_pointer(peaked_byte.unwrap()) {
+                let pointer = Self::get_pointer(reader.read_u16().expect("Could not read pointer.")) as usize;
+                let mut new_reader = ByteReader {
+                    bytes: reader.bytes.to_vec(),
+                    byte_index: pointer
+                };
+                let r_name = Self::parse_name(&mut new_reader);
+                println!("Found referenced name: {}", r_name);
+                if r_name.is_empty() {
+                    panic!("Empty referenced name at pointer {}", pointer);
+                }
+                referenced_name = Some(r_name);
+            }
+            else {
+                let label = Self::parse_label(reader);
+                labels.push(label);
+            }
+            peaked_byte = reader.peak_byte();
+        }
+
+        // When name does not contain a pointer, the name always ends with 0 byte.
+        if referenced_name.is_none()
+        {
+            _ = reader.read_byte().expect("Could not read the trailing 0.");
+        }
+
+        let name = match !labels.is_empty() {
+            true => {
+                if labels.iter().any(|l| l.is_empty()) {
+                    panic!("Empty label found.")
+                }
+                Some(labels.join("."))
+            },
+            false => None
+        };
+        let result_name = match referenced_name {
+            Some(name_to_join) => match name {
+                Some(n) => Some(format!("{}.{}", n, name_to_join)),
+                None => Some(name_to_join)
+            }
+            None => match name {
+                Some(n) => Some(n),
+                None => None
+            }
+        };
+        return result_name.expect("Could not read name.");
+    }
+
+    fn is_label_pointer(byte: u8) -> bool
+    {
+        return (byte & 0b11000000) == 0b11000000;
+    }
+
+    fn get_pointer(double_byte: u16) -> u16
+    {
+        return double_byte & 0b00111111_11111111;
     }
 }
