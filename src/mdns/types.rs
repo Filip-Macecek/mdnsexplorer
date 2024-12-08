@@ -1,4 +1,6 @@
 use std::fmt::{Display, Formatter};
+use std::net::{Ipv4Addr, Ipv6Addr};
+use pnet::packet::ipv4::Ipv4;
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum MDNSRecordType {
@@ -24,6 +26,18 @@ pub enum MDNSRecordType {
     MAILA = 254, // Request for mail agent records
 }
 
+pub enum MDNSRData {
+    A { ipv4_address: Ipv4Addr }, // Maps a hostname to an IPv4 address
+    AAAA { ipv6_addr: Ipv6Addr }, // Maps a hostname to an IPv6 address
+    PTR { domain_name: String }, // Service discovery
+    SRV { priority: u16, weight: u16, port: u16, target_domain_name: String }, // Service instance details
+    TXT { text: String }, // Service metadata TODO: This is often key-value pair
+    CNAME { canonical_domain_name: String }, // Alias for a domain name
+    NSEC { raw: Vec<u8> }, // Next domain name, Bitmap indicating available record types TODO: implement strongly typed NSEC data
+    ANY { raw: Vec<u8> }, // No specific RDATA; used in queries.
+    OTHER { raw: Vec<u8> } // Others
+}
+
 impl MDNSRecordType {
     pub fn from_u16(value: u16) -> Option<Self> {
         match value {
@@ -47,28 +61,43 @@ impl MDNSRecordType {
     }
 }
 
+/// Enum representing the DNS Query Class (QClass)
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MDNSQueryClass {
+    /// Internet (most common for mDNS)
+    IN = 1,
+
+    /// Any class (used in wildcard queries)
+    ANY = 255,
+}
+
+impl MDNSQueryClass {
+    /// Converts a u16 value to an MdnsQueryClass, if possible
+    pub fn from_u16(value: u16) -> Option<Self> {
+        match value {
+            1 => Some(Self::IN),
+            255 => Some(Self::ANY),
+            _ => None,
+        }
+    }
+}
+
 pub struct MDNSQuestion{
-    pub labels_raw: Vec<u8>,
-    pub labels: Vec<String>,
     pub name: String,
-    pub question_type: u16, // first byte is terminator for labels and as such is always 0
-    pub question_class: u16
+    pub question_type: MDNSRecordType,
+    pub question_class: MDNSQueryClass
 }
 
 pub struct MDNSAnswer{
-    pub labels_raw: Vec<u8>,
-    pub labels: Vec<String>,
     pub name: String,
-    pub answer_type: u16, // first byte is terminator for labels and as such is always 0
-    pub answer_class: u16,
-    pub ttl: u32,
+    pub answer_type: MDNSRecordType,
+    pub answer_class: MDNSQueryClass,
+    pub ttl_seconds: u32,
     pub rd_length: u16,
-    pub rdata_raw: Vec<u8>,
-    pub rdata_labels: Option<Vec<String>>
+    pub rdata: MDNSRData
 }
 
 pub struct MDNSMessageHeader {
-    pub raw: Vec<u8>,
     pub query_identifier: u16,
     pub flags: u16,
     pub question_count: u16,

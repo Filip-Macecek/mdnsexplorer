@@ -26,8 +26,8 @@ impl MDNSExplorerApplication {
                 capture::start(|mdns_message| {
                     let model = MdnsMessageOverview::new(
                         mdns_message.header.query_identifier,
-                        mdns_message.questions.iter().map(|q| q.labels.join(".")).collect(),
-                        mdns_message.answers.iter().map(|a| a.labels.join(".")).collect(),
+                        mdns_message.questions.iter().map(|q| q.name.clone()).collect(),
+                        mdns_message.answers.iter().map(|a| a.name.clone()).collect()
                     );
                     match view_model.lock() {
                         Ok(mut m) => {
