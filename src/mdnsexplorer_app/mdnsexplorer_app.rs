@@ -5,7 +5,6 @@ use std;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::process;
-use crate::mdns::capture::send_packet;
 
 pub struct MDNSExplorerApplication {
 }
@@ -23,7 +22,6 @@ impl MDNSExplorerApplication {
             mdns_message_overview_entries: vec![],
         }));
         thread::scope(|s| {
-            // TODO: Don't know how to kill it yet.
             s.spawn(|| {
                 capture::start(|mdns_message| {
                     let model = MdnsMessageOverview::new(

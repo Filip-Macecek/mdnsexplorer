@@ -1,11 +1,9 @@
-use std::net::{IpAddr, Ipv4Addr};
-use std::time::Duration;
 use crate::mdns::mdns_message::MDNSMessage;
-use pnet::datalink::{channel, interfaces, Channel, Config};
+use pnet::datalink::{channel, interfaces, Channel};
 use pnet::packet::ethernet::EthernetPacket;
 use pnet::packet::ip::IpNextHeaderProtocols;
 use pnet::packet::ipv4::Ipv4Packet;
-use pnet::packet::udp::{MutableUdpPacket, UdpPacket};
+use pnet::packet::udp::UdpPacket;
 use pnet::packet::Packet;
 
 pub fn start<F>(callback: F)
