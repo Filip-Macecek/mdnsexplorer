@@ -1,9 +1,11 @@
+use std::net::{IpAddr, Ipv4Addr};
+use std::time::Duration;
 use crate::mdns::mdns_message::MDNSMessage;
-use pnet::datalink::{channel, interfaces, Channel};
+use pnet::datalink::{channel, interfaces, Channel, Config};
 use pnet::packet::ethernet::EthernetPacket;
 use pnet::packet::ip::IpNextHeaderProtocols;
 use pnet::packet::ipv4::Ipv4Packet;
-use pnet::packet::udp::UdpPacket;
+use pnet::packet::udp::{MutableUdpPacket, UdpPacket};
 use pnet::packet::Packet;
 
 pub fn start<F>(callback: F)
@@ -38,6 +40,7 @@ where
     println!("Chosen interface name: {}", default_interface.description);
 
     loop {
+        // There is actually no way to make the call to rx.next() non-blocking on Windows.
         let packet = rx.next().unwrap();
         let ethernet_packet = EthernetPacket::new(packet).unwrap();
         let ipv4_packet = handle_ethernet_packet(&ethernet_packet);

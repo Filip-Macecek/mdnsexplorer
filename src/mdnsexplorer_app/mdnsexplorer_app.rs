@@ -4,6 +4,8 @@ use crate::mdnsexplorer_ui::mdnsexplorer_ui::{MdnsExplorerUi, ViewModel};
 use std;
 use std::sync::{Arc, Mutex};
 use std::thread;
+use std::process;
+use crate::mdns::capture::send_packet;
 
 pub struct MDNSExplorerApplication {
 }
@@ -39,6 +41,11 @@ impl MDNSExplorerApplication {
                 });
             });
             MdnsExplorerUi::run(&view_model);
+            println!("Stopping Mdns Explorer");
+
+            // Since the capture thread could potentially be blocked when awaiting packets,
+            // this is the only way to properly end the program.
+            process::exit(0);
         });
     }
 }
