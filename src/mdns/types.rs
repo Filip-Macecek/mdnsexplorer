@@ -1,6 +1,5 @@
-use std::fmt::{Display, Formatter};
+use std::fmt::{write, Display, Formatter};
 use std::net::{Ipv4Addr, Ipv6Addr};
-use pnet::packet::ipv4::Ipv4;
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum MDNSRecordType {
@@ -26,6 +25,30 @@ pub enum MDNSRecordType {
     MAILA = 254, // Request for mail agent records
 }
 
+impl Display for MDNSRecordType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let record_type = match self {
+            MDNSRecordType::A => "A",
+            MDNSRecordType::NS => "NS",
+            MDNSRecordType::CNAME => "CNAME",
+            MDNSRecordType::SOA => "SOA",
+            MDNSRecordType::PTR => "PTR",
+            MDNSRecordType::MX => "MX",
+            MDNSRecordType::TXT => "TXT",
+            MDNSRecordType::AAAA => "AAAA",
+            MDNSRecordType::SRV => "SRV",
+            MDNSRecordType::NSEC => "NSEC",
+            MDNSRecordType::OPT => "OPT",
+            MDNSRecordType::ANY => "ANY",
+            MDNSRecordType::AXFR => "AXFR",
+            MDNSRecordType::MAILB => "MAILB",
+            MDNSRecordType::MAILA => "MAILA"
+        };
+        write!(f, "{}", record_type)
+    }
+}
+
+#[derive(Clone)]
 pub enum MDNSRData {
     A { ipv4_address: Ipv4Addr }, // Maps a hostname to an IPv4 address
     AAAA { ipv6_addr: Ipv6Addr }, // Maps a hostname to an IPv6 address
@@ -36,6 +59,22 @@ pub enum MDNSRData {
     NSEC { raw: Vec<u8> }, // Next domain name, Bitmap indicating available record types TODO: implement strongly typed NSEC data
     ANY { raw: Vec<u8> }, // No specific RDATA; used in queries.
     OTHER { raw: Vec<u8> } // Others
+}
+
+impl Display for MDNSRData {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            MDNSRData::A { ipv4_address } => { write!(f, "A ({})", ipv4_address) }
+            MDNSRData::AAAA { ipv6_addr } => { write!(f, "AAAA ({})", ipv6_addr) }
+            MDNSRData::PTR { domain_name } => { write!(f, "PTR ({})", domain_name) }
+            MDNSRData::SRV { priority, weight, port, target_domain_name } => { write!(f, "SRV ({}, {}, {}, {})", priority, weight, port, target_domain_name) }
+            MDNSRData::TXT { text } => { write!(f, "TXT ({})", text) }
+            MDNSRData::CNAME { canonical_domain_name } => { write!(f, "CNAME ({})", canonical_domain_name) }
+            MDNSRData::NSEC { .. } => { write!(f, "NSEC") }
+            MDNSRData::ANY { .. } => { write!(f, "ANY") }
+            MDNSRData::OTHER { .. } => { write!(f, "OTHER") }
+        }
+    }
 }
 
 impl MDNSRecordType {
@@ -82,12 +121,14 @@ impl MDNSQueryClass {
     }
 }
 
+#[derive(Clone)]
 pub struct MDNSQuestion{
     pub name: String,
     pub question_type: MDNSRecordType,
     pub question_class: MDNSQueryClass
 }
 
+#[derive(Clone)]
 pub struct MDNSAnswer{
     pub name: String,
     pub answer_type: MDNSRecordType,
@@ -97,6 +138,7 @@ pub struct MDNSAnswer{
     pub rdata: MDNSRData
 }
 
+#[derive(Clone)]
 pub struct MDNSMessageHeader {
     pub query_identifier: u16,
     pub flags: u16,

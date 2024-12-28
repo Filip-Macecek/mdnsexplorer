@@ -1,14 +1,15 @@
-use crate::mdns::mdns_message::MDNSMessage;
+use crate::mdns::mdns_message::{MDNSMessage, MDNSMessageReceivedEvent};
 use pnet::datalink::{channel, interfaces, Channel};
 use pnet::packet::ethernet::EthernetPacket;
 use pnet::packet::ip::IpNextHeaderProtocols;
 use pnet::packet::ipv4::Ipv4Packet;
 use pnet::packet::udp::UdpPacket;
 use pnet::packet::Packet;
+use time::{OffsetDateTime, PrimitiveDateTime};
 
 pub fn start<F>(callback: F)
 where
-    F: Fn(&MDNSMessage)
+    F: Fn(&MDNSMessageReceivedEvent)
 {
     // Get the list of available network interfaces
     let interfaces = interfaces();
@@ -40,13 +41,17 @@ where
     loop {
         // There is actually no way to make the call to rx.next() non-blocking on Windows.
         let packet = rx.next().unwrap();
+        let now = OffsetDateTime::now_utc();
         let ethernet_packet = EthernetPacket::new(packet).unwrap();
         let ipv4_packet = handle_ethernet_packet(&ethernet_packet);
         let mdns_packet = ipv4_packet.and_then(|p| handle_ipv4_packet(&p));
         match mdns_packet {
             Some(m) => {
                 println!("{}", m.header.query_identifier);
-                callback(&m);
+                callback(&MDNSMessageReceivedEvent {
+                    received_datetime: PrimitiveDateTime::new(now.date(), now.time()),
+                    message: m,
+                });
             },
             None => {}
         }
