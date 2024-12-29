@@ -11,3 +11,4 @@ egui = "0.29.1"
 egui_extras = "0.29.1"
 pnet = "0.35.0"
 time = "0.3.37"
+winapi = { version = "0.3.6", features = ["securitybaseapi", "processthreadsapi", "minwindef", "winnt"] }

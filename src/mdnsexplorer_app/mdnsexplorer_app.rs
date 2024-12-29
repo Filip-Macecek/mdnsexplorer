@@ -7,6 +7,8 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::SystemTime;
 use pnet::datalink::{interfaces, NetworkInterface};
+use crate::mdnsexplorer_app::is_elevated::is_elevated;
+use crate::mdnsexplorer_ui::confirmation_dialogue_ui::ConfirmationDialogueUi;
 use crate::mdnsexplorer_ui::interface_chooser_ui::InterfaceChooserUi;
 
 pub struct MDNSExplorerApplication {
@@ -22,24 +24,37 @@ impl MDNSExplorerApplication {
     pub fn run(&mut self) {
         println!("Starting Mdns Explorer");
 
+        if !is_elevated()
+        {
+            ConfirmationDialogueUi::run(
+                "Missing Admin Privileges",
+                "Administrator privileges are missing. Please, make sure you are running the program as administrator."
+            );
+            process::exit(0);
+        }
+
         let interface = Self::run_interface_chooser();
         let view_model = Arc::new(Mutex::new(ViewModel {
             mdns_message_overview_entries: vec![],
+            is_paused: false
         }));
         thread::scope(|s| {
-
             s.spawn(|| {
                 capture::start(&interface, |mdns_message| {
-                    let model = MdnsMessageOverview::new(
-                        mdns_message.received_datetime.time(),
-                        mdns_message.message.clone(),
-                    );
                     let now = SystemTime::now();
                     match view_model.lock() {
                         Ok(mut m) => {
                             let duration = now.elapsed().unwrap();
                             println!("Locking the view_model took {} ms.", duration.as_millis());
-                            m.mdns_message_overview_entries.push(model);
+
+                            if !m.is_paused
+                            {
+                                let model = MdnsMessageOverview::new(
+                                    mdns_message.received_datetime.time(),
+                                    mdns_message.message.clone(),
+                                );
+                                m.mdns_message_overview_entries.push(model);
+                            }
                         }
                         Err(_) => {
                             panic!("Could not lock Mdns message overview");
@@ -47,7 +62,7 @@ impl MDNSExplorerApplication {
                     }
                 });
             });
-            MdnsExplorerUi::run(&view_model);
+            MdnsExplorerUi::run(&view_model, &interface.description);
             println!("Stopping Mdns Explorer");
 
             // Since the capture thread could potentially be blocked when awaiting packets,
