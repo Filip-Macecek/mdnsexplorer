@@ -18,7 +18,7 @@ impl MdnsExplorerUi<'_> {
     pub fn run(view_model: &Arc<Mutex<ViewModel>>, interface_name: &str) {
         let builder = egui::ViewportBuilder::default()
             .with_maximize_button(true)
-            .with_inner_size(Vec2::new(1200.0, 800.0));
+            .with_inner_size(Vec2::new(1300.0, 800.0));
         let options = eframe::NativeOptions {
             viewport: builder,
             ..Default::default()

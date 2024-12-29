@@ -1,5 +1,6 @@
 use std::cmp;
 use std::cmp::max;
+use std::net::Ipv4Addr;
 use crate::mdns::mdns_message::MDNSMessage;
 use crate::mdns::types::{MDNSAnswer, MDNSQuestion};
 use eframe::egui;
@@ -8,12 +9,14 @@ use time::Time;
 #[derive(Clone)]
 pub struct MdnsMessageOverview {
     utc_time: Time,
-    message: MDNSMessage
+    message: MDNSMessage,
+    source_ip: Ipv4Addr,
+    destination_ip: Ipv4Addr,
 }
 
 impl MdnsMessageOverview {
-    pub fn new(utc_time: Time, message: MDNSMessage) -> Self {
-        Self { utc_time, message }
+    pub fn new(utc_time: Time, message: MDNSMessage, source_ip: Ipv4Addr, destination_ip: Ipv4Addr) -> Self {
+        Self { utc_time, message, source_ip: source_ip, destination_ip: destination_ip }
     }
 }
 
@@ -71,6 +74,7 @@ impl MdnsMessageTable {
             .resizable(self.resizable)
             .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
             .column(Column::initial(120 as f32).resizable(true).auto_size_this_frame(false))
+            .column(Column::initial(80 as f32).resizable(true).auto_size_this_frame(false))
             .column(Column::initial(500 as f32).resizable(true).auto_size_this_frame(false))
             .column(Column::initial(500 as f32).resizable(true).auto_size_this_frame(false))
             .min_scrolled_height(0.0)
@@ -91,6 +95,9 @@ impl MdnsMessageTable {
                     ui.strong("UTC Time");
                 });
                 header.col(|ui| {
+                    ui.strong("Source IP");
+                });
+                header.col(|ui| {
                     ui.strong("Questions");
                 });
                 header.col(|ui| {
@@ -104,6 +111,9 @@ impl MdnsMessageTable {
                     let overview = &self.overviews[row_index];
                     row.col(|ui| {
                         ui.label(overview.utc_time.to_string());
+                    });
+                    row.col(|ui| {
+                        ui.label(format!("{}", overview.source_ip.to_string()));
                     });
                     let questions = overview.message.questions.iter().map(|q| Self::format_question(q)).collect::<Vec<_>>();
                     row.col(|ui| {

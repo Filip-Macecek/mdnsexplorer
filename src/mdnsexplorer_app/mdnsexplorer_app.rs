@@ -52,6 +52,8 @@ impl MDNSExplorerApplication {
                                 let model = MdnsMessageOverview::new(
                                     mdns_message.received_datetime.time(),
                                     mdns_message.message.clone(),
+                                    mdns_message.source_ip,
+                                    mdns_message.destination_ip
                                 );
                                 m.mdns_message_overview_entries.push(model);
                             }

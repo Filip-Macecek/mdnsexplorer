@@ -1,5 +1,5 @@
 use crate::mdns::mdns_message::{MDNSMessage, MDNSMessageReceivedEvent};
-use pnet::datalink::{channel, interfaces, Channel, NetworkInterface};
+use pnet::datalink::{channel, Channel, NetworkInterface};
 use pnet::packet::ethernet::EthernetPacket;
 use pnet::packet::ip::IpNextHeaderProtocols;
 use pnet::packet::ipv4::Ipv4Packet;
@@ -25,14 +25,23 @@ where
         let now = OffsetDateTime::now_utc();
         let ethernet_packet = EthernetPacket::new(packet).unwrap();
         let ipv4_packet = handle_ethernet_packet(&ethernet_packet);
-        let mdns_packet = ipv4_packet.and_then(|p| handle_ipv4_packet(&p));
-        match mdns_packet {
-            Some(m) => {
-                callback(&MDNSMessageReceivedEvent {
-                    received_datetime: PrimitiveDateTime::new(now.date(), now.time()),
-                    message: m,
-                });
-            },
+        match ipv4_packet {
+            Some(p) => {
+                let source_ip = p.get_source();
+                let destination_ip = p.get_destination();
+                let mdns_packet = handle_ipv4_packet(&p);
+                match mdns_packet {
+                    Some(m) => {
+                        callback(&MDNSMessageReceivedEvent {
+                            received_datetime: PrimitiveDateTime::new(now.date(), now.time()),
+                            message: m,
+                            source_ip: source_ip,
+                            destination_ip: destination_ip,
+                        });
+                    },
+                    None => {}
+                }
+            }
             None => {}
         }
     }
@@ -48,6 +57,8 @@ fn handle_ethernet_packet<'a>(eth_packet: &'a EthernetPacket<'a>) -> Option<Ipv4
 }
 
 fn handle_ipv4_packet(ipv4_packet: &Ipv4Packet) -> Option<MDNSMessage> {
+
+
     match ipv4_packet.get_next_level_protocol() {
         IpNextHeaderProtocols::Udp => {
             let udp_packet = UdpPacket::new(ipv4_packet.payload()).unwrap();
