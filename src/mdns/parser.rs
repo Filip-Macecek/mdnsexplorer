@@ -117,10 +117,7 @@ pub fn parse_mdns_answers(reader: &mut ByteReader, answer_count: usize) -> Vec<M
     let mut answers = Vec::with_capacity(answer_count);
     for i in 0..answer_count
     {
-        println!("Parsing answer number {}", i+1);
         let name = parse_name(reader);
-        println!("Parsing answer name {}", name);
-        println!("current byte index: {}", reader.byte_index);
 
         let answer_type = reader.read_u16().expect("Could not read answer type.");
 
@@ -130,9 +127,6 @@ pub fn parse_mdns_answers(reader: &mut ByteReader, answer_count: usize) -> Vec<M
         let answer_class = reader.read_byte().expect("Could not read question class.") as u16;
         let ttl = reader.read_u32().expect("Could not read ttl.");
         let rd_length = reader.read_u16().expect("Could not read record length.");
-
-        println!("Parsing answer record length {}", rd_length);
-        println!("current byte index {}", reader.byte_index);
 
         let record_type = MDNSRecordType::from_u16(answer_type).expect("Invalid answer type.");
         let rdata = parse_rdata(reader, record_type, rd_length);
@@ -212,7 +206,6 @@ pub fn parse_name(reader: &mut ByteReader) -> String
                 byte_index: pointer
             };
             let r_name = parse_name(&mut new_reader);
-            println!("Found referenced name: {}", r_name);
             if r_name.is_empty() {
                 panic!("Empty referenced name at pointer {}", pointer);
             }
