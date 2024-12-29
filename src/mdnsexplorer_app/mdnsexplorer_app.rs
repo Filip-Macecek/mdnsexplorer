@@ -45,7 +45,7 @@ impl MDNSExplorerApplication {
                     match view_model.lock() {
                         Ok(mut m) => {
                             let duration = now.elapsed().unwrap();
-                            println!("Locking the view_model took {} ms.", duration.as_millis());
+                            // println!("Locking the view_model took {} ms.", duration.as_millis());
 
                             if !m.is_paused
                             {

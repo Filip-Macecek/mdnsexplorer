@@ -100,5 +100,9 @@ impl eframe::App for MdnsExplorerUi<'_> {
                     });
                 });
         });
+
+        // This is needed in order for the program to keep updating even if the window is not active.
+        // That way user can keep the window open and see the incoming packets without interacting with the window.
+        ctx.request_repaint();
     }
 }

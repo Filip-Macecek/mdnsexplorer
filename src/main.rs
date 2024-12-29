@@ -1,3 +1,5 @@
+#![windows_subsystem = "windows"]
+
 mod mdns;
 mod mdnsexplorer_ui;
 mod mdnsexplorer_app;
