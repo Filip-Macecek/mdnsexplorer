@@ -24,7 +24,7 @@ impl MdnsExplorerUi<'_> {
             ..Default::default()
         };
         let _ = eframe::run_native(
-            "My egui App",
+            "MDNS Explorer",
             options,
             Box::new(|_| {
                 Ok(Box::<MdnsExplorerUi>::new(MdnsExplorerUi {
