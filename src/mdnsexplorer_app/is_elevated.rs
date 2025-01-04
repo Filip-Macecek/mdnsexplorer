@@ -36,7 +36,3 @@ pub fn is_elevated() -> bool {
     }
     false
 }
-
-// TODO
-#[cfg(not(windows))]
-pub fn is_elevated() -> bool { true }

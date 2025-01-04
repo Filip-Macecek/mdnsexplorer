@@ -7,7 +7,6 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::SystemTime;
 use pnet::datalink::{interfaces, NetworkInterface};
-use crate::mdnsexplorer_app::is_elevated::is_elevated;
 use crate::mdnsexplorer_ui::confirmation_dialogue_ui::ConfirmationDialogueUi;
 use crate::mdnsexplorer_ui::interface_chooser_ui::InterfaceChooserUi;
 
@@ -24,13 +23,17 @@ impl MDNSExplorerApplication {
     pub fn run(&mut self) {
         println!("Starting Mdns Explorer");
 
-        if !is_elevated()
+        #[cfg(windows)]
         {
-            ConfirmationDialogueUi::run(
-                "Missing Admin Privileges",
-                "Administrator privileges are missing. Please, make sure you are running the program as administrator."
-            );
-            process::exit(0);
+            use crate::mdnsexplorer_app::is_elevated::is_elevated;
+            if !is_elevated()
+            {
+                ConfirmationDialogueUi::run(
+                    "Missing Admin Privileges",
+                    "Administrator privileges are missing. Please, make sure you are running the program as administrator."
+                );
+                process::exit(0);
+            }
         }
 
         let interface = Self::run_interface_chooser();
